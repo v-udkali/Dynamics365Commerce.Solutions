@@ -1,0 +1,34 @@
+﻿{
+    "$schema": "../schemas/manifestSchema.json",
+    "components": {
+        "resources": {
+            "culturesDirectoryPath": "Resources/Strings",
+            "fallbackUICulture": "en-US",
+            "stringResourcesFileName": "resources.resjson",
+            "supportedUICultures": [ "en-US" ]
+        },
+        "create": {
+            "operations": [
+                {
+                    "operationId": "9000",
+                    "operationRequestFactoryPath": "Alerts/Operations/QueueAlerts/QueueAlertFactory",
+                    "operationRequestHandlerPath": "Alerts/Operations/QueueAlerts/QueueAlertHandler"
+                }
+            ],
+            "templatedDialogs": [
+                {
+                    "name": "Alert dialog",
+                    "description": "A dialog showing the list of alerts generated from the connected store devices.",
+                    "modulePath": "Alerts/Views/AlertsDialog",
+                    "htmlPath": "Alerts/Views/AlertsDialog.html"
+                }
+            ]
+
+        }
+    },
+    "description": "This sample demonstrates how to read alerts from CDS and show it as notification in POS, alerts are generated from the connected store devices and stored in the CDS Alert entity",
+    "minimumPosVersion": "10.0.14",
+    "name": "Pos_Alert_Sample",
+    "publisher": "Microsoft",
+    "version": "10.0.18"
+}
