@@ -4,9 +4,6 @@ param(
     [string]$Archive,
 
     [Parameter(Mandatory = $false)]
-    [string[]]$LegacyHashAlgorithms,
-
-    [Parameter(Mandatory = $false)]
     [switch]$SaveTransformedXml
 )
 
@@ -214,37 +211,15 @@ function Validate-DataIntegrity {
             $nodeName = $node.Name
             $idProperty = $node.Attributes.Item(0).Name
             $idValue = $node.Attributes.Item(0).Value
-            $registerNumber = $node.RegisterNumber
             $nodeHeader = "$nodeName $idProperty=$idValue"
-            if ($registerNumber) {
-                $nodeHeader += ", RegisterNumber=$registerNumber"
-            }
-
             Write-Verbose ($Labels.ValidatingNode -f $nodeHeader)
             $recalculatedDataToSign = Calculate-DataToSign $node
             $recalculatedDataToSignBytes = [System.Text.Encoding]::UTF8.GetBytes($recalculatedDataToSign)
-            if ($recalculatedDataToSign -eq $node.DataToSign) {
-                $hashAlgorithms = @($node.HashAlgorithm)
-                $legacy = -not $node.DataToSignFormatVersion
-                if ($legacy) {
-                    $valid = $false
-                    if (-not $hashAlgorithms -and $LegacyHashAlgorithms) {
-                        $hashAlgorithms = $LegacyHashAlgorithms
-                    }
-                }
-
-                foreach ($hashAlgorithm in $hashAlgorithms) {
-                    $signature = ConvertFrom-LegacyBase64UrlString ($node.Signature)
-                    $valid = Verify-Data `
-                        $recalculatedDataToSignBytes `
-                        $signature `
-                        $hashAlgorithm `
-                        $node.CertificateThumbprint
-                    if ($valid) {
-                        break
-                    }
-                }
-            }
+            $valid = Verify-Data `
+                $recalculatedDataToSignBytes `
+                $node.Signature `
+                $node.HashAlgorithm `
+                $node.CertificateThumbprint
             if ($valid) {
                 Write-Verbose ($Labels.NodeValidationPassed -f $nodeHeader)
             }
@@ -265,7 +240,7 @@ function Validate-DataIntegrity {
                         $diffHashTables | `
                             ForEach-Object { [PSCustomObject]$_ } | `
                             Format-Table -Property $Labels.AttributeHeader, $Labels.ExpectedValueHeader, $Labels.ActualValueHeader | `
-                            Out-String
+                            Out-Host
                     }
                 }
             }
@@ -372,38 +347,6 @@ function ConvertFrom-Base64UrlString {
 
 <#
 .DESCRIPTION
-    Converts a legacy base64Url string to a base64 string.
-#>
-function ConvertFrom-LegacyBase64UrlString {
-    param (
-        [string]$legacyBase64UrlString
-    )
-
-    if (-not $legacyBase64UrlString) {
-        return $legacyBase64UrlString
-    }
-
-    if ($legacyBase64UrlString.Length -lt 2) {
-        return $legacyBase64UrlString
-    }
-
-    [int] $numPadChars = [int][char]$legacyBase64UrlString[$legacyBase64UrlString.Length - 1] - [int][char]'0';
-
-    if ($numPadChars -lt 0 -or $numPadChars -gt 10) {
-        return $legacyBase64UrlString
-    }
-
-    $suffix = New-Object string('=', $numPadChars)
-
-    $signature = $legacyBase64UrlString.Remove($legacyBase64UrlString.Length - 1);
-
-    $signature = $signature + $suffix
-
-    $signature
-}
-
-<#
-.DESCRIPTION
     Compares two hash tables and produces an object containing properties that are different.
 #>
 function Compare-HashTable {
@@ -441,14 +384,14 @@ function Calculate-DataToSign {
         [System.Xml.XmlElement]$node
     )
 
+    if (-not $node.DataToSignFormatVersion) {
+        throw $Labels.DataToSignFormatVersionMissing
+    }
 
     $invalidFormatMessage = ($Labels.DataToSignFormatVersionInvalid -f $node.DataToSignFormatVersion)
 
     switch ($node.Name) {
         "PeriodGrandTotal" {
-            if (-not $node.DataToSignFormatVersion) {
-                throw $Labels.DataToSignFormatVersionMissing
-            }
             switch ($node.DataToSignFormatVersion) {
                 "2.1_4.0" { Calculate-PeriodGrandTotalDataToSign-2140 $node }
                 default { throw $invalidFormatMessage }
@@ -458,7 +401,6 @@ function Calculate-DataToSign {
         "Shift" {
             switch ($node.DataToSignFormatVersion) {
                 "2.1_4.0" { Calculate-ShiftDataToSign-2140 $node }
-                "" { Calculate-ShiftDataToSign-Legacy $node }
                 default { throw $invalidFormatMessage }
             }
         }
@@ -466,7 +408,6 @@ function Calculate-DataToSign {
         "Receipt" {
             switch ($node.DataToSignFormatVersion) {
                 "2.1_4.0" { Calculate-ReceiptDataToSign-2140 $node }
-                "" { Calculate-ReceiptDataToSign-Legacy $node }
                 default { throw $invalidFormatMessage }
             }
         }
@@ -474,7 +415,6 @@ function Calculate-DataToSign {
         "ReceiptCopy" {
             switch ($node.DataToSignFormatVersion) {
                 "2.1_4.0" { Calculate-ReceiptCopyDataToSign-2140 $node }
-                "" { Calculate-ReceiptCopyDataToSign-Legacy $node }
                 default { throw $invalidFormatMessage }
             }
         }
@@ -482,7 +422,6 @@ function Calculate-DataToSign {
         "AuditEvent" {
             switch ($node.DataToSignFormatVersion) {
                 "2.1_4.0" { Calculate-AuditEventDataToSign-2140 $node }
-                "" { Calculate-AuditEventDataToSign-Legacy $node }
                 default { throw $invalidFormatMessage }
             }
         }
@@ -504,14 +443,14 @@ function ConvertTo-Metadata {
         [string]$dataToSign
     )
 
+    if (-not $node.DataToSignFormatVersion) {
+        throw $Labels.DataToSignFormatVersionMissing
+    }
+
     $invalidFormatMessage = ($Labels.DataToSignFormatVersionInvalid -f $node.DataToSignFormatVersion)
 
     switch ($node.Name) {
         "PeriodGrandTotal" {
-            if (-not $node.DataToSignFormatVersion) {
-                throw $Labels.DataToSignFormatVersionMissing
-            }
-
             switch ($node.DataToSignFormatVersion) {
                 "2.1_4.0" { ConvertTo-PeriodGrandTotalMetadata-2140 $dataToSign }
                 default { throw $invalidFormatMessage }
@@ -521,7 +460,6 @@ function ConvertTo-Metadata {
         "Shift" {
             switch ($node.DataToSignFormatVersion) {
                 "2.1_4.0" { ConvertTo-ShiftMetadata-2140 $dataToSign }
-                "" { ConvertTo-ShiftMetadata-Legacy $dataToSign }
                 default { throw $invalidFormatMessage }
             }
         }
@@ -529,7 +467,6 @@ function ConvertTo-Metadata {
         "Receipt" {
             switch ($node.DataToSignFormatVersion) {
                 "2.1_4.0" { ConvertTo-ReceiptMetadata-2140 $dataToSign }
-                "" { ConvertTo-ReceiptMetadata-Legacy $dataToSign }
                 default { throw $invalidFormatMessage }
             }
         }
@@ -537,7 +474,6 @@ function ConvertTo-Metadata {
         "ReceiptCopy" {
             switch ($node.DataToSignFormatVersion) {
                 "2.1_4.0" { ConvertTo-ReceiptCopyMetadata-2140 $dataToSign }
-                "" { ConvertTo-ReceiptCopyMetadata-Legacy $dataToSign }
                 default { throw $invalidFormatMessage }
             }
         }
@@ -545,7 +481,6 @@ function ConvertTo-Metadata {
         "AuditEvent" {
             switch ($node.DataToSignFormatVersion) {
                 "2.1_4.0" { ConvertTo-AuditEventMetadata-2140 $dataToSign }
-                "" { ConvertTo-AuditEventMetadata-Legacy $dataToSign }
                 default { throw $invalidFormatMessage }
             }
         }
@@ -709,52 +644,6 @@ function ConvertTo-ShiftMetadata-2140 {
     }
 }
 
-<#
-.DESCRIPTION
-    Calculates the data to sign for the Shift node.
-
-.NOTES
-    The old version of receipt copy.
-#>
-function Calculate-ShiftDataToSign-Legacy {
-    param (
-        [System.Xml.XmlElement]$shift
-    )
-    $metadata = ConvertTo-ShiftMetadata-Legacy $shift.DataToSign
-    $previousShift = $shift.PreviousSibling
-    $perviousSignature = if ($previousShift) {
-        $previousShift.Signature
-    }
-    else {
-        $metadata.PreviousSignature
-    }
-
-    $perviousSignature = if ($metadata.IsFirstSigned -eq "N") { $perviousSignature } else { "" }
-    $result = [System.String]::Join(",", $metadata.ShiftData, $metadata.IsFirstSigned, $perviousSignature)
-    $result
-}
-
-<#
-.DESCRIPTION
-    Converts the DataToSign element of the Shift node into a metadata object.
-
-.NOTES
-    The old version of receipt copy.
-#>
-function ConvertTo-ShiftMetadata-Legacy {
-    param (
-        [string]$dataToSign
-    )
-
-    $values = $dataToSign.Split(",")
-    $shiftData = [string]::Join(",", ($values |  Select-Object -First ($values.Count - 2)))
-    @{
-        ShiftData         = $shiftData
-        IsFirstSigned     = $values[$values.Count - 2]
-        PreviousSignature = $values[$values.Count - 1]
-    }
-}
-
 #endregion
 
 #region Receipt
@@ -835,122 +724,9 @@ function ConvertTo-ReceiptMetadata-2140 {
     }
 }
 
-<#
-.DESCRIPTION
-    Calculates the data to sign for the Receipt node.
-
-.NOTES
-    The old version of receipt copy.
-#>
-function Calculate-ReceiptDataToSign-Legacy {
-    param (
-        [System.Xml.XmlElement]$receipt
-    )
-    $metadata = ConvertTo-ReceiptMetadata-Legacy $receipt.DataToSign
-    $previousReceipt = $receipt.PreviousSibling
-    $perviousSignature = if ($previousReceipt) {
-        $previousReceipt.Signature
-    }
-    else {
-        $metadata.PreviousSignature
-    }
-
-    $part1 = $metadata.TotalAmountsByTaxRate
-    $part2 = $metadata.TotalAmount
-    $part3 = $metadata.RegistrationTime
-    $part4 = $metadata.RegisterNumber
-    $part5 = $metadata.SequentialNumber
-    $part6 = $metadata.TransactionType
-    $part7 = $metadata.IsFirstSigned
-    $part8 = if ($part7 -eq "N") { $perviousSignature } else { "" }
-    $part9 = $metadata.LineCount
-    $result = [System.String]::Join(",", $part1, $part2, $part3, $part4, $part5, $part6, $part7, $part8, $part9)
-    $result
-}
-
-<#
-.DESCRIPTION
-    Converts the DataToSign element of the Receipt node into a metadata object.
-
-.NOTES
-    The old version of receipt copy.
-#>
-function ConvertTo-ReceiptMetadata-Legacy {
-    param (
-        [string]$dataToSign
-    )
-    $values = $dataToSign.Split(",")
-    @{
-        TotalAmountsByTaxRate = $values[0]
-        TotalAmount           = $values[1]
-        RegistrationTime      = $values[2]
-        RegisterNumber        = $values[3]
-        SequentialNumber      = $values[4]
-        TransactionType       = $values[5]
-        IsFirstSigned         = $values[6]
-        PreviousSignature     = $values[7]
-        LineCount             = $values[8]
-    }
-}
-
 #endregion
 
 #region ReceiptCopy
-
-<#
-.DESCRIPTION
-    Calculates the data to sign for the ReceiptCopy node.
-
-.NOTES
-    The old version of receipt copy.
-#>
-function Calculate-ReceiptCopyDataToSign-Legacy {
-    param (
-        [System.Xml.XmlElement]$receiptCopy
-    )
-    $metadata = ConvertTo-ReceiptCopyMetadata-Legacy $receiptCopy.DataToSign
-    $previousReceiptCopy = $receiptCopy.PreviousSibling
-    $perviousSignature = if ($previousReceiptCopy) {
-        $previousReceiptCopy.Signature
-    }
-    else {
-        $metadata.PreviousSignature
-    }
-    $part1 = $metadata.ReceiptId
-    $part2 = $metadata.TransactionType
-    $part3 = $metadata.CopyNumber
-    $part4 = $metadata.OperatorCode
-    $part5 = $metadata.RegistrationTime
-    $part6 = $metadata.SequentialNumber
-    $part7 = $metadata.IsFirstSigned
-    $part8 = if ($part7 -eq "N") { $perviousSignature } else { "" }
-    $result = [System.String]::Join(",", $part1, $part2, $part3, $part4, $part5, $part6, $part7, $part8)
-    $result
-}
-
-<#
-.DESCRIPTION
-    Converts the DataToSign element of the ReceiptCopy node into a metadata object.
-
-.NOTES
-    The old version of receipt copy.
-#>
-function ConvertTo-ReceiptCopyMetadata-Legacy {
-    param (
-        [string]$dataToSign
-    )
-    $values = $dataToSign.Split(",")
-    @{
-        ReceiptId         = $values[0]
-        TransactionType   = $values[1]
-        CopyNumber        = $values[2]
-        OperatorCode      = $values[3]
-        RegistrationTime  = $values[4]
-        SequentialNumber  = $values[5]
-        IsFirstSigned     = $values[6]
-        PreviousSignature = $values[7]
-    }
-}
 
 <#
 .DESCRIPTION
@@ -1017,62 +793,6 @@ function ConvertTo-ReceiptCopyMetadata-2140 {
 
 <#
 .DESCRIPTION
-    Converts the DataToSign element of the AuditEvent node into a metadata object.
-
-.NOTES
-    Old version of audit event
-#>
-function ConvertTo-AuditEventMetadata-Legacy {
-    param (
-        [string]$dataToSign
-    )
-    $values = $dataToSign.Split(",")
-    @{
-        SequentialNumber  = $values[0]
-        Code              = $values[1]
-        Message           = $values[2]
-        RegistrationTime  = $values[3]
-        OperatorCode      = $values[4]
-        RegisterNumber    = $values[5]
-        IsFirstSigned     = $values[6]
-        PreviousSignature = $values[7]
-    }
-}
-
-<#
-.DESCRIPTION
-    Calculates the data to sign for the AuditEvent node.
-
-.NOTES
-    The old version of audit event
-#>
-function Calculate-AuditEventDataToSign-Legacy {
-    param (
-        [System.Xml.XmlElement]$auditEvent
-    )
-    $previousAuditEvent = $auditEvent.PreviousSibling
-    $metadata = ConvertTo-AuditEventMetadata-Legacy $auditEvent.DataToSign
-    $perviousSignature = if ($previousAuditEvent) {
-        $previousAuditEvent.Signature
-    }
-    else {
-        $metadata.PreviousSignature
-    }
-    $part1 = $metadata.SequentialNumber
-    $part2 = $metadata.Code
-    $part3 = $metadata.Message
-    $part4 = $metadata.RegistrationTime
-    $part5 = $metadata.OperatorCode
-    $part6 = $auditEvent.RegisterNumber
-    $part7 = $metadata.IsFirstSigned
-    $part8 = if ($part7 -eq "N") { $perviousSignature } else { "" }
-    $result = [System.String]::Join(",", $part1, $part2, $part3, $part4, $part5, $part6, $part7, $part8)
-    $result
-}
-
-
-<#
-.DESCRIPTION
     Calculates the data to sign for the AuditEvent node.
 
 .NOTES
@@ -1090,15 +810,15 @@ function Calculate-AuditEventDataToSign-2140 {
     else {
         $metadata.PreviousSignature
     }
-    $part1 = $auditEvent.SequentialNumber
-    $part2 = $auditEvent.Code
-    $part3 = $metadata.Message
-    $part4 = $auditEvent.Date
-    $part5 = $auditEvent.OperatorCode
-    $part6 = $auditEvent.RegisterNumber
-    $part7 = if ($auditEvent.SequentialNumber -eq "1") { "Y" } else { "N" }
-    $part8 = if ($part7 -eq "N") { $perviousSignature } else { "" }
-    $result = [System.String]::Join(",", $part1, $part2, $part3, $part4, $part5, $part6, $part7, $part8)
+    $part0 = $auditEvent.SequentialNumber
+    $part1 = $auditEvent.Code
+    $part2 = $metadata.Message
+    $part3 = $auditEvent.Date
+    $part4 = $auditEvent.OperatorCode
+    $part5 = $auditEvent.RegisterNumber
+    $part6 = if ($auditEvent.SequentialNumber -eq "1") { "Y" } else { "N" }
+    $part7 = if ($part6 -eq "N") { $perviousSignature } else { "" }
+    $result = [System.String]::Join(",", $part0, $part1, $part2, $part3, $part4, $part5, $part6, $part7)
     $result
 }
 

@@ -35,8 +35,7 @@
     <xsl:template match="Shift" mode="group">
         <Shifts RegisterNumber="{RegisterNumber}">
             <xsl:apply-templates select="key('shifts-by-register-number', RegisterNumber)">
-                <xsl:sort select="Date" data-type="number"/>
-                <xsl:sort select="SequentialNumber" data-type="number"/>
+                <xsl:sort select="SequentialNumber" data-type="number" order="ascending"/>
             </xsl:apply-templates>
         </Shifts>
     </xsl:template>
@@ -44,8 +43,7 @@
     <xsl:template match="Receipt" mode="group">
         <Receipts RegisterNumber="{RegisterNumber}">
             <xsl:apply-templates select="key('receipts-by-register-number', RegisterNumber)">
-                <xsl:sort select="Date" data-type="number"/>
-                <xsl:sort select="SequentialNumber" data-type="number"/>
+                <xsl:sort select="SequentialNumber" data-type="number" order="ascending"/>
             </xsl:apply-templates>
         </Receipts>
     </xsl:template>
@@ -53,8 +51,7 @@
     <xsl:template match="ReceiptCopy" mode="group">
         <ReceiptCopies RegisterNumber="{RegisterNumber}">
             <xsl:apply-templates select="key('receipt-copies-by-register-number', RegisterNumber)">
-                <xsl:sort select="Date" data-type="number"/>
-                <xsl:sort select="SequentialNumber" data-type="number"/>
+                <xsl:sort select="SequentialNumber" data-type="number" order="ascending"/>
             </xsl:apply-templates>
         </ReceiptCopies>
     </xsl:template>
@@ -62,8 +59,7 @@
     <xsl:template match="AuditEvent" mode="group">
         <AuditEvents RegisterNumber="{RegisterNumber}">
             <xsl:apply-templates select="key('audit-events-by-register-number', RegisterNumber)">
-                <xsl:sort select="Date" data-type="number"/>
-                <xsl:sort select="SequentialNumber" data-type="number"/>
+                <xsl:sort select="SequentialNumber" data-type="number" order="ascending"/>
             </xsl:apply-templates>
         </AuditEvents>
     </xsl:template>
