@@ -9,7 +9,7 @@ License is listed in the [LICENSE](./LICENSE) file.
 In this sample, you will learn how to implement age gate pop up in page load.
 It contains some information as a content-block and a consent button. Consent button will trigger an event to write cookie that suggests that the appropriate action has taken place.
 
-![Overview](docs/image1.png)
+![Overview](docs/Image1.PNG)
 ![Overview](docs/image2.png)
 
 ## Starter kit license
